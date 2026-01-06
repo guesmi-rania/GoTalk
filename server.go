@@ -1,75 +1,78 @@
-// Copyright 2023 The Go Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Hello is a simple hello, world demonstration web server.
-//
-// It serves version information on /version and answers
-// any other request like /name by saying "Hello, name!".
-//
-// See golang.org/x/example/outyet for a more sophisticated server.
 package main
 
 import (
-	"flag"
 	"fmt"
-	"html"
-	"log"
 	"net/http"
 	"os"
-	"runtime/debug"
-	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+
+	"gotalk/internal/user"
+	"gotalk/internal/message"
+	ws "gotalk/internal/websocket"
+	"gotalk/pkg/database"
 )
 
-func usage() {
-	fmt.Fprintf(os.Stderr, "usage: helloserver [options]\n")
-	flag.PrintDefaults()
-	os.Exit(2)
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
 }
-
-var (
-	greeting = flag.String("g", "Hello", "Greet with `greeting`")
-	addr     = flag.String("addr", "localhost:8080", "address to serve")
-)
 
 func main() {
-	// Parse flags.
-	flag.Usage = usage
-	flag.Parse()
+	// Connect to DB
+	database.Connect()
 
-	// Parse and validate arguments (none).
-	args := flag.Args()
-	if len(args) != 0 {
-		usage()
+	// Migrate tables
+	user.Migrate(database.DB)
+	message.Migrate(database.DB)
+
+	// Init hub
+	hub := ws.NewHub()
+	go hub.Run()
+
+	// Init Gin
+	r := gin.Default()
+
+	// Health check
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// WebSocket endpoint
+	r.GET("/ws", func(c *gin.Context) {
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			fmt.Println("Upgrade error:", err)
+			return
+		}
+
+		client := &ws.Client{
+			Conn: conn,
+			Send: make(chan []byte),
+		}
+		hub.Register <- client
+
+		go func() {
+			defer func() {
+				hub.Unregister <- client
+				conn.Close()
+			}()
+			for {
+				_, msg, err := conn.ReadMessage()
+				if err != nil {
+					break
+				}
+				hub.Broadcast <- msg
+			}
+		}()
+	})
+
+	// 🔹 PORT pour Render
+	port := os.Getenv("PORT") // Render fournit ce port
+	if port == "" {
+		port = "8080" // fallback pour dev local
 	}
 
-	// Register handlers.
-	// All requests not otherwise mapped with go to greet.
-	// /version is mapped specifically to version.
-	http.HandleFunc("/", greet)
-	http.HandleFunc("/version", version)
-
-	log.Printf("serving http://%s\n", *addr)
-	log.Fatal(http.ListenAndServe(*addr, nil))
-}
-
-func version(w http.ResponseWriter, r *http.Request) {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		http.Error(w, "no build information available", 500)
-		return
-	}
-
-	fmt.Fprintf(w, "<!DOCTYPE html>\n<pre>\n")
-	fmt.Fprintf(w, "%s\n", html.EscapeString(info.String()))
-}
-
-func greet(w http.ResponseWriter, r *http.Request) {
-	name := strings.Trim(r.URL.Path, "/")
-	if name == "" {
-		name = "Gopher"
-	}
-
-	fmt.Fprintf(w, "<!DOCTYPE html>\n")
-	fmt.Fprintf(w, "%s, %s!\n", *greeting, html.EscapeString(name))
+	fmt.Println("Serving on port", port)
+	r.Run("0.0.0.0:" + port) // écoute sur toutes les interfaces
 }
