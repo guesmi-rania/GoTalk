@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	
 
 	"gotalk/internal/user"
 	"gotalk/internal/message"
@@ -68,5 +70,11 @@ func main() {
 	})
 
 	// Start server
-	r.Run(":8080")
+	port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080" // fallback pour dev local
+    }
+
+    fmt.Println("Serving on port", port)
+    r.Run("0.0.0.0:" + port) // écoute sur toutes les interfaces
 }
