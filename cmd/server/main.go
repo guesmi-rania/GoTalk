@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	
 
 	"gotalk/internal/user"
 	"gotalk/internal/message"
@@ -20,21 +19,21 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-	// 1️⃣ Connect to DB
+	// Connect to DB
 	database.Connect()
 
-	// 2️⃣ Migrate tables
+	// Migrate tables
 	user.Migrate(database.DB)
 	message.Migrate(database.DB)
 
-	// 3️⃣ Init hub
+	// Init hub
 	hub := ws.NewHub()
 	go hub.Run()
 
-	// 4️⃣ Init Gin router
+	// Init Gin
 	r := gin.Default()
 
-	// Health check endpoint
+	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
@@ -53,7 +52,6 @@ func main() {
 		}
 		hub.Register <- client
 
-		// Handle client read messages
 		go func() {
 			defer func() {
 				hub.Unregister <- client
@@ -69,12 +67,12 @@ func main() {
 		}()
 	})
 
-	// Start server
-	port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080" // fallback pour dev local
-    }
+	// 🔹 PORT pour Render
+	port := os.Getenv("PORT") // Render fournit ce port
+	if port == "" {
+		port = "8080" // fallback pour dev local
+	}
 
-    fmt.Println("Serving on port", port)
-    r.Run("0.0.0.0:" + port) // écoute sur toutes les interfaces
+	fmt.Println("Serving on port", port)
+	r.Run("0.0.0.0:" + port) // écoute sur toutes les interfaces
 }
