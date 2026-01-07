@@ -34,9 +34,11 @@ func main() {
 	r := gin.Default()
 
 	// Health check
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "GoTalk server is running!",
+		})
+	})	
 
 	// WebSocket endpoint
 	r.GET("/ws", func(c *gin.Context) {
