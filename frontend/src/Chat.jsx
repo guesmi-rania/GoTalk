@@ -8,7 +8,8 @@ export default function Chat() {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    ws.current = new WebSocket("wss://gotalk-ykyu.onrender.com/ws");
+// Chat.jsx
+ws.current = new WebSocket("wss://gotalk-ykyu.onrender.com/ws");
 
     ws.current.onmessage = (event) => {
       const msg = JSON.parse(event.data);
